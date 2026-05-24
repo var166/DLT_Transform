@@ -158,6 +158,10 @@ def reprojection_error(P, pts_2d, pts_3d):
     errors = np.linalg.norm(projected - pts_2d, axis=1)
     return errors.mean(), errors.max(), np.median(errors), errors
 
+def solve_resection_raw(pts_2d, pts_3d):
+    M = build_M_matrix(pts_2d, pts_3d)
+    v = get_dlt_solution(M)
+    return v[:12].reshape(3, 4)
 
 def get_inner_params_of_camera(P):
     Q, R = np.linalg.qr(P[:, :3])
@@ -210,6 +214,7 @@ def show_projections(P_dlt, P_gt, pts_3d, img):
 #todo: itereaza prin toate pozele cu house si apoi ia si dinozauru si fa ceva statistica pe erorile de reproiectie 
 def house_loop():
     pts_3d_all = np.loadtxt(HOUSE / 'house.p3d')
+    raws, norms, gts = [], [], []
     for i in range(10):
         pts_2d_all = np.loadtxt(HOUSE / f'house.00{i}.corners')
         nview = np.loadtxt(HOUSE / 'house.nview-corners', dtype=str)
@@ -234,10 +239,19 @@ def house_loop():
         k_given, t_given = get_inner_params_of_camera(NormalP)
         print(f'obtained K = {K} \nvs \nnormal K = {k_given}\n obrained t = \n{t} vs given t = \n{t_given}')
         src = cv2.imread(str(HOUSE / f'house.00{i}.pgm'))
-        show_projections(P, NormalP, pts_3d, src)
 
+        #Aici vad cum ar fi fara normalizare
+        P_raw  = solve_resection_raw(pts_2d, pts_3d)
+        P_norm = solve_resection(pts_2d, pts_3d)
+        raws.append(reprojection_error(P_raw,  pts_2d, pts_3d)[2])
+        norms.append(reprojection_error(P_norm, pts_2d, pts_3d)[2])
+        gts.append(reprojection_error(NormalP, pts_2d, pts_3d)[2])
+        
+        show_projections(P, NormalP, pts_3d, src)
+    print(f"median across views: raw={np.median(raws):.4f}  hartley={np.median(norms):.4f}  gt={np.median(gts):.4f}")
 
 def corridor_loop():
+    raws, norms, gts = [], [], []
     pts_3d_all = np.loadtxt(CORRIDOR / 'bt.p3d')
     nview = np.loadtxt(CORRIDOR / 'bt.nview-corners', dtype=str)
     for i in range(10):
@@ -263,8 +277,16 @@ def corridor_loop():
         k_given, t_given = get_inner_params_of_camera(NormalP)
         print(f'obtained K = {K} \nvs \nnormal K = {k_given}\n obrained t = \n{t} vs given t = \n{t_given}')
         src = cv2.imread(str(CORRIDOR / f'bt.00{i}.pgm'))
-        show_projections(P, NormalP, pts_3d, src)
 
+            #din nou, aici fara normalizare
+        P_raw  = solve_resection_raw(pts_2d, pts_3d)
+        P_norm = solve_resection(pts_2d, pts_3d)
+        raws.append(reprojection_error(P_raw,  pts_2d, pts_3d)[2])
+        norms.append(reprojection_error(P_norm, pts_2d, pts_3d)[2])
+        gts.append(reprojection_error(NormalP, pts_2d, pts_3d)[2])
+
+        show_projections(P, NormalP, pts_3d, src)
+    print(f"median across views: raw={np.median(raws):.4f}  hartley={np.median(norms):.4f}  gt={np.median(gts):.4f}")
 
 def main():
     house_loop()
